@@ -14,13 +14,13 @@ plays the dialing animation while the other plays the incoming animation.
 
 ### Single gate (Pico or Pico W)
 
-| Component | Qty | Notes |
-|-----------|-----|-------|
-| Raspberry Pi Pico / Pico W | 1 | Pico W required for wireless |
-| 5 mm LED (blue or white) | 9 | One per chevron |
-| 330 Ω resistor | 9 | Current limiter (adjust for LED colour) |
-| Reed switch **or** momentary button | 1 | Trigger input |
-| Breadboard / PCB | 1 | |
+| Component                           | Qty | Notes                                   |
+| ----------------------------------- | --- | --------------------------------------- |
+| Raspberry Pi Pico / Pico W          | 1   | Pico W required for wireless            |
+| 5 mm LED (blue or white)            | 9   | One per chevron                         |
+| 330 Ω resistor                      | 9   | Current limiter (adjust for LED colour) |
+| Reed switch **or** momentary button | 1   | Trigger input                           |
+| Breadboard / PCB                    | 1   |                                         |
 
 ### Wiring
 
@@ -152,24 +152,24 @@ A second press on either reed switch force-closes the wormhole early.
 
 ## Customisation
 
-| Setting | Effect |
-|---------|--------|
-| `LOCK_ORDER` | Change which LEDs lock in which order |
-| `ROTATION_TIME_MIN/MAX` | Speed of simulated gate rotation |
-| `KAWOOSH_DURATION` | Length of the vortex flash |
-| `WORMHOLE_TIMEOUT` | How long the stable wormhole lasts |
-| `WORMHOLE_PULSE_PERIOD` | Speed of the breathing effect |
-| `WORMHOLE_MIN/MAX_BRIGHT` | Depth of the breathing effect |
-| `PWM_FREQ` | LED PWM frequency (1000 Hz default) |
+| Setting                   | Effect                                |
+| ------------------------- | ------------------------------------- |
+| `LOCK_ORDER`              | Change which LEDs lock in which order |
+| `ROTATION_TIME_MIN/MAX`   | Speed of simulated gate rotation      |
+| `KAWOOSH_DURATION`        | Length of the vortex flash            |
+| `WORMHOLE_TIMEOUT`        | How long the stable wormhole lasts    |
+| `WORMHOLE_PULSE_PERIOD`   | Speed of the breathing effect         |
+| `WORMHOLE_MIN/MAX_BRIGHT` | Depth of the breathing effect         |
+| `PWM_FREQ`                | LED PWM frequency (1000 Hz default)   |
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Likely cause |
-|---------|-------------|
-| LEDs don't light | Check GND path; verify `LED_PINS` match wiring |
-| Trigger fires instantly on boot | Switch wired to 3.3 V instead of GND; set `TRIGGER_ACTIVE_LOW = False` |
-| Secondary can't find Primary | Ensure both boards are Pico W; power Primary first so it is advertising |
-| `ImportError: no module named 'bluetooth'` | Board is a plain Pico (no wireless); set `MODE = 'standalone'` |
-| Animation is too slow / fast | Adjust `ROTATION_TIME_*` and `LOCK_FLASH_*_MS` in `config.py` |
+| Symptom                                    | Likely cause                                                            |
+| ------------------------------------------ | ----------------------------------------------------------------------- |
+| LEDs don't light                           | Check GND path; verify `LED_PINS` match wiring                          |
+| Trigger fires instantly on boot            | Switch wired to 3.3 V instead of GND; set `TRIGGER_ACTIVE_LOW = False`  |
+| Secondary can't find Primary               | Ensure both boards are Pico W; power Primary first so it is advertising |
+| `ImportError: no module named 'bluetooth'` | Board is a plain Pico (no wireless); set `MODE = 'standalone'`          |
+| Animation is too slow / fast               | Adjust `ROTATION_TIME_*` and `LOCK_FLASH_*_MS` in `config.py`           |
