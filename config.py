@@ -71,7 +71,12 @@ KAWOOSH_ON_MS      = 35    # Flash on  in vortex (ms)
 KAWOOSH_OFF_MS     = 25    # Flash off in vortex (ms)
 
 # Stable wormhole
-WORMHOLE_TIMEOUT       = 38.0  # Auto-close after N seconds (real gate = 38 min)
+WORMHOLE_TIMEOUT       = 300.0 # Hard safety cut-off (s) – fallback if reed switch
+                                # signal is lost. Set longer for game use.
+WORMHOLE_MIN_OPEN_S    = 4.0   # Minimum open time before release can trigger close.
+                                # Should be at least as long as the kawoosh + settle.
+WORMHOLE_CLOSE_DELAY_S = 3.0   # Extra seconds to wait after reed switch releases
+                                # before the wormhole actually closes.
 WORMHOLE_PULSE_PERIOD  = 2.2   # One full breathe cycle (s)
 WORMHOLE_MIN_BRIGHT    = 0.35  # Dimmest point of pulse
 WORMHOLE_MAX_BRIGHT    = 1.0   # Brightest point of pulse

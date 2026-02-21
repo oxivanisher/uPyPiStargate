@@ -62,14 +62,30 @@ _ADV_NAME    = const(0x09)   # Complete Local Name
 _ADV_UUID128 = const(0x07)   # Complete list of 128-bit service UUIDs
 
 
-def _adv_payload(name: str, service_uuid: bluetooth.UUID) -> bytes:
+def _adv_payload(service_uuid: bluetooth.UUID) -> bytes:
+    """Main advertisement: flags + 128-bit UUID only.
+
+    Keeping the name out of adv_data is essential: flags(3) + UUID128(18) = 21
+    bytes, safely within the 31-byte BLE advertisement limit.  Adding even a
+    short name like 'Stargate-Pri' (14 bytes) would push it to 35 bytes and
+    cause the UUID field to be silently truncated, making discovery fail.
+    """
     buf = bytearray()
     buf += bytes([2, _ADV_FLAGS, 0x06])          # LE General Discoverable, BR/EDR off
-    n = name.encode()
-    buf += bytes([1 + len(n), _ADV_NAME]) + n
     u = bytes(service_uuid)                       # 16 bytes, already little-endian
     buf += bytes([1 + len(u), _ADV_UUID128]) + u
     return bytes(buf)
+
+
+def _resp_payload(name: str) -> bytes:
+    """Scan-response payload carrying the human-readable device name.
+
+    Sent only in response to an active-scan request, so it does not affect
+    our passive-scan-based UUID discovery.  Purely for identification via
+    Bluetooth scanner apps.
+    """
+    n = name.encode()
+    return bytes([1 + len(n), _ADV_NAME]) + n
 
 
 def _contains_uuid(adv_data: bytes, target: bluetooth.UUID) -> bool:
@@ -128,6 +144,14 @@ class BLEPrimary:
     def is_connected(self) -> bool:
         return self._conn_handle is not None
 
+    def is_busy(self) -> bool:
+        """Primary is never in a scan/connect state – always False."""
+        return False
+
+    def start_connect(self) -> None:
+        """No-op: Primary advertises passively; connection is peer-initiated."""
+        pass
+
     def signal_open(self) -> None:
         """Notify Secondary to start its incoming animation."""
         if self._conn_handle is not None:
@@ -154,8 +178,9 @@ class BLEPrimary:
     # ── BLE IRQ ─────────────────────────────────────────────────
 
     def _advertise(self) -> None:
-        adv = _adv_payload(self._name + '-Pri', _SVC_UUID)
-        self._ble.gap_advertise(100_000, adv_data=adv)   # 100 ms interval
+        adv  = _adv_payload(_SVC_UUID)
+        resp = _resp_payload(self._name + '-Pri')
+        self._ble.gap_advertise(100_000, adv_data=adv, resp_data=resp)
 
     def _irq(self, event, data) -> None:
         if event == _IRQ_CENTRAL_CONNECT:
@@ -216,34 +241,52 @@ class BLESecondary:
         self._cccd_handle     = None   # CCCD descriptor handle
         self._svc_start       = None
         self._svc_end         = None
+        self._desc_start      = None
 
         self._ble = bluetooth.BLE()
         self._ble.active(True)
         self._ble.irq(self._irq)
-        print('[BLE Secondary] Ready – call try_connect() to link with Primary')
+        print('[BLE Secondary] Ready')
 
     # ── Public interface ────────────────────────────────────────
 
     def is_connected(self) -> bool:
-        return self._state == self._ST_READY
+        """True as soon as the physical BLE link is up (matches BLEPrimary behaviour)."""
+        return self._conn_handle is not None
 
-    def try_connect(self, timeout_s: int = None) -> bool:
-        """Scan for Primary and establish a fully-discovered connection.
+    def is_busy(self) -> bool:
+        """True while a scan or connection attempt is in progress."""
+        return self._state not in (self._ST_IDLE, self._ST_READY,
+                                   self._ST_FAILED)
 
-        Blocking.  Returns True if the link is ready for use.
-        Safe to call repeatedly when is_connected() is False.
+    def start_connect(self) -> None:
+        """Start scanning for Primary in the background (non-blocking).
+
+        IRQ callbacks drive all subsequent connection and discovery steps.
+        Call is_connected() to check when the link is ready.
+        Safe to call repeatedly – ignored if already scanning or connected.
+        """
+        if self._state not in (self._ST_IDLE, self._ST_FAILED):
+            return   # already scanning, connecting, discovering, or connected
+
+        self._reset_discovery()
+        self._state = self._ST_SCANNING
+        self._ble.gap_scan(self._scan_timeout * 1000, 30_000, 30_000)
+        print('[BLE Secondary] Background scan started …')
+
+    def try_connect(self, timeout_s=None) -> bool:
+        """Blocking connect – only used when we must be connected before
+        signalling (i.e. inside signal_open() if the link dropped).
+
+        Prefer start_connect() for all non-critical reconnection.
         """
         if self._state == self._ST_READY:
             return True
 
+        self.start_connect()
+
+        # Wait for scan phase
         timeout_s = timeout_s or self._scan_timeout
-        self._reset_discovery()
-
-        print('[BLE Secondary] Scanning for Primary …')
-        self._state = self._ST_SCANNING
-        self._ble.gap_scan(timeout_s * 1000, 30_000, 30_000)
-
-        # ── Phase 1: find Primary in scan results ───────────────
         deadline = utime.ticks_add(utime.ticks_ms(), timeout_s * 1000)
         while self._state == self._ST_SCANNING:
             if utime.ticks_diff(deadline, utime.ticks_ms()) <= 0:
@@ -256,7 +299,7 @@ class BLESecondary:
         if self._state in (self._ST_IDLE, self._ST_FAILED):
             return False
 
-        # ── Phase 2: connect + discover service/char/CCCD ───────
+        # Wait for connection + discovery
         deadline = utime.ticks_add(utime.ticks_ms(), 12_000)
         while self._state not in (self._ST_READY, self._ST_FAILED,
                                   self._ST_IDLE):
@@ -292,7 +335,9 @@ class BLESecondary:
         self._svc_end     = None
 
     def _write(self, cmd: bytes) -> bool:
-        if self._state != self._ST_READY or self._char_handle is None:
+        if self._conn_handle is None or self._char_handle is None:
+            print('[BLE Secondary] Cannot write – conn=%s char=%s'
+                  % (self._conn_handle, self._char_handle))
             return False
         try:
             self._ble.gattc_write(self._conn_handle, self._char_handle, cmd, 1)
@@ -308,96 +353,121 @@ class BLESecondary:
         if event == _IRQ_SCAN_RESULT:
             addr_type, addr, adv_type, rssi, adv_data = data
             if _contains_uuid(bytes(adv_data), _SVC_UUID):
-                print('[BLE Secondary] Found Primary, RSSI', rssi)
+                addr_str = ':'.join('%02x' % b for b in bytes(addr))
+                print('[BLE Secondary] Found Primary  addr=%s  RSSI=%d' % (addr_str, rssi))
                 self._ble.gap_scan(None)
                 self._state = self._ST_CONNECTING
                 self._ble.gap_connect(addr_type, addr)
 
         elif event == _IRQ_SCAN_DONE:
-            # Fired after gap_scan duration or after gap_scan(None).
             if self._state == self._ST_SCANNING:
-                self._state = self._ST_IDLE   # timed out without finding Primary
+                print('[BLE Secondary] Scan finished – Primary not found, will retry')
+                self._state = self._ST_IDLE
 
         elif event == _IRQ_PERIPHERAL_CONNECT:
-            conn_handle, _, _ = data
+            conn_handle, addr_type, addr = data
+            addr_str = ':'.join('%02x' % b for b in bytes(addr))
             self._conn_handle = conn_handle
             self._state = self._ST_DISC_SVC
+            print('[BLE Secondary] Connected (handle=%d addr=%s) – discovering services …'
+                  % (conn_handle, addr_str))
             self._ble.gattc_discover_services(conn_handle)
 
         elif event == _IRQ_PERIPHERAL_DISCONNECT:
+            conn_handle, _, _ = data
             self._conn_handle = None
             self._char_handle = None
             self._cccd_handle = None
             self._state = self._ST_IDLE
-            print('[BLE Secondary] Lost connection to Primary')
+            print('[BLE Secondary] Disconnected from Primary (handle=%d)' % conn_handle)
 
         elif event == _IRQ_GATTC_SERVICE_RESULT:
             conn_handle, start_handle, end_handle, uuid = data
             if uuid == _SVC_UUID:
                 self._svc_start = start_handle
                 self._svc_end   = end_handle
+                print('[BLE Secondary] Stargate service found  handles=%d–%d'
+                      % (start_handle, end_handle))
+            # else: unrelated service, ignore
 
         elif event == _IRQ_GATTC_SERVICE_DONE:
             conn_handle, status = data
+            if self._state != self._ST_DISC_SVC:
+                return
             if status == 0 and self._svc_start is not None:
+                print('[BLE Secondary] Service discovery done – discovering characteristics …')
                 self._state = self._ST_DISC_CHAR
                 self._ble.gattc_discover_characteristics(
                     conn_handle, self._svc_start, self._svc_end)
             else:
-                print('[BLE Secondary] Service not found (status', status, ')')
+                print('[BLE Secondary] Service discovery FAILED (status=%d'
+                      ', svc_start=%s)' % (status, self._svc_start))
                 self._state = self._ST_FAILED
 
         elif event == _IRQ_GATTC_CHARACTERISTIC_RESULT:
             conn_handle, def_handle, value_handle, properties, uuid = data
             if uuid == _CHAR_UUID:
-                self._char_handle  = value_handle
-                # Descriptor range starts right after the value handle.
-                self._desc_start   = value_handle + 1
+                self._char_handle = value_handle
+                self._desc_start  = value_handle + 1
+                print('[BLE Secondary] Wormhole characteristic found  value_handle=%d  props=0x%02x'
+                      % (value_handle, properties))
+            # else: unrelated characteristic, ignore
 
         elif event == _IRQ_GATTC_CHARACTERISTIC_DONE:
             conn_handle, status = data
-            if status == 0 and self._char_handle is not None:
+            if self._state != self._ST_DISC_CHAR:
+                return
+            if status == 0 and self._char_handle is not None and self._desc_start is not None:
+                print('[BLE Secondary] Characteristic discovery done – discovering descriptors …')
                 self._state = self._ST_DISC_DESC
-                # Search for CCCD between value_handle+1 and end of service.
                 self._ble.gattc_discover_descriptors(
-                    conn_handle,
-                    self._desc_start,
-                    self._svc_end)
+                    conn_handle, self._desc_start,
+                    self._svc_end if self._svc_end is not None else 0xFFFF)
             else:
-                print('[BLE Secondary] Characteristic not found (status', status, ')')
+                print('[BLE Secondary] Characteristic discovery FAILED (status=%d'
+                      ', char_handle=%s)' % (status, self._char_handle))
                 self._state = self._ST_FAILED
 
         elif event == _IRQ_GATTC_DESCRIPTOR_RESULT:
             conn_handle, dsc_handle, uuid = data
+            print('[BLE Secondary] Descriptor  handle=%d  uuid=%s' % (dsc_handle, uuid))
             if uuid == _CCCD_UUID:
                 self._cccd_handle = dsc_handle
+                print('[BLE Secondary] CCCD found  handle=%d' % dsc_handle)
 
         elif event == _IRQ_GATTC_DESCRIPTOR_DONE:
             conn_handle, status = data
+            if self._state != self._ST_DISC_DESC:
+                return
             if self._cccd_handle is not None:
-                # Enable notifications: write 0x0001 to CCCD.
+                print('[BLE Secondary] Enabling notifications (writing CCCD) …')
                 self._ble.gattc_write(self._conn_handle, self._cccd_handle,
                                       b'\x01\x00', 1)
                 self._state = self._ST_READY
-                print('[BLE Secondary] Notifications enabled')
+                print('[BLE Secondary] READY – notifications enabled, link up')
             else:
-                # No CCCD found (unlikely but safe to continue without notify).
-                print('[BLE Secondary] Warning: no CCCD – notifications disabled')
+                print('[BLE Secondary] WARNING: no CCCD found – notifications unavailable.'
+                      '  Writes still work.')
                 self._state = self._ST_READY
+                print('[BLE Secondary] READY (no notifications)')
 
         elif event == _IRQ_GATTC_NOTIFY:
-            # Primary pushed a notification to us.
             conn_handle, value_handle, notify_data = data
             value = bytes(notify_data)
+            cmd_name = 'OPEN' if value == CMD_OPEN else ('CLOSE' if value == CMD_CLOSE
+                        else ('0x%s' % value.hex()))
+            print('[BLE Secondary] Notification received: %s (raw=%s)'
+                  % (cmd_name, value.hex()))
             if value == CMD_OPEN:
-                print('[BLE Secondary] Received OPEN notification from Primary')
                 self.wormhole_opened = True
                 self.wormhole_closed = False
             elif value == CMD_CLOSE:
-                print('[BLE Secondary] Received CLOSE notification from Primary')
                 self.wormhole_closed = True
 
         elif event == _IRQ_GATTC_WRITE_DONE:
             conn_handle, value_handle, status = data
-            if status != 0:
-                print('[BLE Secondary] Write failed (status', status, ')')
+            if status == 0:
+                print('[BLE Secondary] Write ack  handle=%d  OK' % value_handle)
+            else:
+                print('[BLE Secondary] Write FAILED  handle=%d  status=%d'
+                      % (value_handle, status))

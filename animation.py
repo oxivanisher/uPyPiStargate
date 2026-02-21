@@ -93,11 +93,16 @@ class GateAnimator:
     """
 
     def __init__(self, leds: StargateLEDs, cfg):
-        self.leds = leds
-        self.cfg  = cfg
+        self.leds      = leds
+        self.cfg       = cfg
         # stop_flag is checked inside stable_wormhole() every loop tick.
         # Set it to True from outside (e.g. BLE IRQ) to close early.
         self.stop_flag = False
+        # Optional callable invoked on every inner-loop tick.
+        # Assign e.g. status_led.update so the LED stays alive during
+        # blocking animations.  Defaults to a no-op so call sites need
+        # no 'if tick_fn' guard and the type stays callable throughout.
+        self.tick_fn = lambda: None
 
     # ── Public sequences ────────────────────────────────────────
 
@@ -162,33 +167,61 @@ class GateAnimator:
 
         self._kawoosh(locked)
 
-    def stable_wormhole(self, locked: list, timeout_s: float) -> None:
-        """Slow breathing pulse on locked chevrons until timeout or stop_flag.
+    def stable_wormhole(self, locked: list, timeout_s: float,
+                        keep_open_fn=None) -> None:
+        """Slow breathing pulse on locked chevrons.
 
-        The wormhole closes automatically after timeout_s seconds.
-        External code can set self.stop_flag = True to close early.
+        Closes when any of these happen (first wins):
+          1. timeout_s elapses (safety cut-off).
+          2. stop_flag is set True externally.
+          3. keep_open_fn is provided AND returns False for at least
+             WORMHOLE_CLOSE_DELAY_S seconds, AND WORMHOLE_MIN_OPEN_S
+             has already elapsed.
+
+        keep_open_fn  – callable() → bool.  Return True while the wormhole
+                        should stay open (e.g. reed switch active), False when
+                        the trigger has been released.  None = timeout only.
         """
         self.stop_flag = False
-        end_ms = utime.ticks_add(utime.ticks_ms(), int(timeout_s * 1000))
-        period_ms = int(self.cfg.WORMHOLE_PULSE_PERIOD * 1000)
+        now            = utime.ticks_ms()
+        end_ms         = utime.ticks_add(now, int(timeout_s * 1000))
+        min_end_ms     = utime.ticks_add(now, int(self.cfg.WORMHOLE_MIN_OPEN_S * 1000))
+        close_delay_ms = int(self.cfg.WORMHOLE_CLOSE_DELAY_S * 1000)
+        period_ms      = int(self.cfg.WORMHOLE_PULSE_PERIOD * 1000)
+        release_ms     = None   # timestamp when keep_open_fn first returned False
 
         while True:
             now = utime.ticks_ms()
+
             if self.stop_flag:
                 break
             if utime.ticks_diff(end_ms, now) <= 0:
                 break
 
-            # Sine-based breathing: smoothly between min and max brightness
-            phase = (now % period_ms) / period_ms   # 0.0 – 1.0
-            # Goes from min at 0.0 → max at 0.5 → min at 1.0
-            s = 0.5 - 0.5 * math.cos(2 * math.pi * phase)
+            # ── Reed-switch / keep-open logic ───────────────────
+            if keep_open_fn is not None:
+                past_min = utime.ticks_diff(now, min_end_ms) >= 0
+                if past_min:
+                    if keep_open_fn():
+                        # Trigger still active – reset any pending close timer.
+                        release_ms = None
+                    else:
+                        # Trigger released – start (or check) the close delay.
+                        if release_ms is None:
+                            release_ms = now
+                        elif utime.ticks_diff(now, release_ms) >= close_delay_ms:
+                            break   # delay expired → close
+
+            # ── Sine-based breathing ─────────────────────────────
+            phase      = (now % period_ms) / period_ms
+            s          = 0.5 - 0.5 * math.cos(2 * math.pi * phase)
             brightness = (self.cfg.WORMHOLE_MIN_BRIGHT
                           + s * (self.cfg.WORMHOLE_MAX_BRIGHT
                                  - self.cfg.WORMHOLE_MIN_BRIGHT))
             for i in locked:
                 self.leds.set(i, brightness)
 
+            self.tick_fn()
             utime.sleep_ms(20)
 
     def wormhole_close(self, locked: list) -> None:
@@ -244,6 +277,7 @@ class GateAnimator:
                 scan_pos += 1
                 last_ms   = now
 
+            self.tick_fn()
             utime.sleep_ms(5)
 
         # Clean up scan light
@@ -290,6 +324,9 @@ class GateAnimator:
                 self.leds.set_all(0.0)
                 utime.sleep_ms(off_ms + 10)
             else:
+                pass
+            self.tick_fn()
+            if remaining <= 500:
                 # Phase 3: settle – locked chevrons fade in
                 break
 
