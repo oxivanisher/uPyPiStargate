@@ -33,7 +33,9 @@ LED_PINS = [
 # Order in which LED indices are locked during a standard 7-chevron dial.
 # The last entry is always the master chevron (index 0 = top).
 # Adjust to match how your physical LEDs are laid out around the gate model.
-LOCK_ORDER = [3, 4, 5, 8, 9, 10, 0]   # 7 chevrons; last = master (top)
+LOCK_ORDER = [1, 2, 3, 6, 7, 8, 0]    # 7 chevrons; last = master (top)
+# Values are LED *indices* (0–8), not GPIO pin numbers.
+# index = GPIO_pin - 2  (e.g. GPIO 9 → index 7, GPIO 10 → index 8)
 
 # --- Trigger Input ---
 # Connect a reed switch (or momentary button) between TRIGGER_PIN and GND.

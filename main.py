@@ -114,7 +114,8 @@ def main() -> None:
         # ── Secondary: maintain persistent connection ──────────
         # Only attempt reconnection while the gate is idle so the blocking
         # scan doesn't interrupt an animation.
-        if (isinstance(ble, BLESecondary)
+        if (config.MODE == 'secondary'
+                and ble is not None
                 and not gate_busy
                 and not ble.is_connected()
                 and utime.ticks_diff(now, last_reconnect) >= reconnect_ms):
