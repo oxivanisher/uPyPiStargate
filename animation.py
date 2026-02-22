@@ -134,9 +134,10 @@ class GateAnimator:
 
             # ── Gate rotation ───────────────────────────────────
             rotation_ms = self._random_rotation_ms()
-            self._rotation_scan(locked, led_idx, rotation_ms)
+            self._rotation_scan(locked, rotation_ms)
 
             # ── Chevron lock ────────────────────────────────────
+            print('[anim] Step %d: locking LED index %d' % (step, led_idx))
             if is_final:
                 self._chevron_lock(led_idx,
                                    flashes=self.cfg.FINAL_LOCK_FLASHES,
@@ -240,19 +241,18 @@ class GateAnimator:
         frac = (utime.ticks_ms() & 0xFF) / 255.0
         return int((self.cfg.ROTATION_TIME_MIN + frac * span) * 1000)
 
-    def _rotation_scan(self, locked: list, target: int, duration_ms: int) -> None:
+    def _rotation_scan(self, locked: list, duration_ms: int) -> None:
         """Animate a dim sweep through unlocked chevrons to simulate gate spin.
 
-        The scan light travels around the ring; after time elapses the target
-        chevron's position is left dark (lock flash follows immediately).
+        The scan light travels around the full ring of LED positions; locked
+        chevrons are skipped, all others (including the next-to-lock target)
+        participate in the sweep.
 
-        locked   – indices already locked (stay bright)
-        target   – index that will lock next (not yet in locked)
+        locked      – indices already locked (stay bright, skipped by scan)
         duration_ms – how long the scan lasts
         """
-        # Unlocked indices (excluding target – it will flash separately)
-        unlocked = [i for i in range(self.leds.count)
-                    if i not in locked and i != target]
+        # All LED positions that aren't yet locked (target included)
+        unlocked = [i for i in range(self.leds.count) if i not in locked]
 
         if not unlocked:
             utime.sleep_ms(duration_ms)

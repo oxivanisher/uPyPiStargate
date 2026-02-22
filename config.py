@@ -6,7 +6,9 @@
 
 # --- LED Pins ---
 # GPIO pins for the 9 chevron LEDs (connect each LED + resistor between pin and GND).
-# Recommended resistor: 220-330 ohm for standard 3.3 V LEDs.
+# Resistor value depends on LED colour (GPIO output = 3.3 V):
+#   Blue / white  (Vf ≈ 3.0 V) → 33 Ω   gives ~10 mA
+#   Red / yellow  (Vf ≈ 2.0 V) → 100 Ω  gives ~13 mA
 #
 # Physical chevron layout (Milky Way gate, viewed from front):
 #
@@ -30,10 +32,13 @@ LED_PINS = [
     10,  # index 8 – upper-left
 ]
 
-# Order in which LED indices are locked during a standard 7-chevron dial.
+# Order in which LED indices are locked during a dial sequence.
 # The last entry is always the master chevron (index 0 = top).
 # Adjust to match how your physical LEDs are laid out around the gate model.
-LOCK_ORDER = [1, 2, 3, 6, 7, 8, 0]    # 7 chevrons; last = master (top)
+# Any length works: 7 entries = standard Milky Way dial,
+#                   8 entries = Pegasus dial (requires 8 connected LEDs).
+# Omit indices for LEDs you have not wired up (they are simply skipped).
+LOCK_ORDER = [1, 2, 3, 6, 7, 8, 0]    # indices of chevrons to lock; last = master (top)
 # Values are LED *indices* (0–8), not GPIO pin numbers.
 # index = GPIO_pin - 2  (e.g. GPIO 9 → index 7, GPIO 10 → index 8)
 
@@ -51,7 +56,7 @@ DEBOUNCE_MS        = 50    # Debounce hold time in milliseconds
 # Gate-rotation phase (between each chevron lock)
 ROTATION_TIME_MIN  = 0.8   # Shortest rotation window
 ROTATION_TIME_MAX  = 2.0   # Longest  rotation window
-ROTATION_SCAN_DIM  = 0.18  # Brightness of the scanning sweep (0.0–1.0)
+ROTATION_SCAN_DIM  = 0.3   # Brightness of the scanning sweep (0.0–1.0)
 ROTATION_STEP_MS   = 90    # How often the scan-light advances (ms)
 
 # Chevron lock animation
@@ -60,7 +65,7 @@ LOCK_FLASH_ON_MS   = 80    # Flash on  duration (ms)
 LOCK_FLASH_OFF_MS  = 55    # Flash off duration (ms)
 LOCK_BRIGHTNESS    = 1.0   # Steady brightness once locked (0.0–1.0)
 
-# Final (7th) chevron gets extra drama
+# Final (master) chevron gets extra drama
 FINAL_LOCK_FLASHES = 5
 FINAL_FLASH_ON_MS  = 100
 FINAL_FLASH_OFF_MS = 60
