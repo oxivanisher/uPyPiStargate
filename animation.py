@@ -120,8 +120,11 @@ class GateAnimator:
             utime.sleep_ms(40)
         utime.sleep_ms(300)
 
-    def dialing_sequence(self, lock_order: list) -> None:
-        """Full Milky Way gate dialing sequence.
+    def dialing_sequence(self, lock_order: list) -> list:
+        """Lock all chevrons in sequence and return the locked list.
+
+        Does NOT play the kawoosh – call kawoosh(locked) afterwards so the
+        caller can signal the remote gate between the two phases.
 
         lock_order  – list of LED indices to lock, in order.
                       The last one is the master (top) chevron.
@@ -129,15 +132,16 @@ class GateAnimator:
         self.leds.off()
         locked = []
 
+        scan_dir = 1   # alternates ±1 after each chevron, like the real gate ring
         for step, led_idx in enumerate(lock_order):
             is_final = (step == len(lock_order) - 1)
 
             # ── Gate rotation ───────────────────────────────────
             rotation_ms = self._random_rotation_ms()
-            self._rotation_scan(locked, rotation_ms)
+            self._rotation_scan(locked, rotation_ms, scan_dir)
+            scan_dir *= -1
 
             # ── Chevron lock ────────────────────────────────────
-            print('[anim] Step %d: locking LED index %d' % (step, led_idx))
             if is_final:
                 self._chevron_lock(led_idx,
                                    flashes=self.cfg.FINAL_LOCK_FLASHES,
@@ -151,8 +155,7 @@ class GateAnimator:
 
             locked.append(led_idx)
 
-        # ── Kawoosh ─────────────────────────────────────────────
-        self._kawoosh(locked)
+        return locked
 
     def incoming_wormhole(self, lock_order: list) -> None:
         """Destination-gate animation: rapid sequential lock then kawoosh."""
@@ -166,7 +169,7 @@ class GateAnimator:
             locked.append(led_idx)
             utime.sleep_ms(self.cfg.INCOMING_STEP_MS)
 
-        self._kawoosh(locked)
+        self.kawoosh(locked)
 
     def stable_wormhole(self, locked: list, timeout_s: float,
                         keep_open_fn=None) -> None:
@@ -241,15 +244,18 @@ class GateAnimator:
         frac = (utime.ticks_ms() & 0xFF) / 255.0
         return int((self.cfg.ROTATION_TIME_MIN + frac * span) * 1000)
 
-    def _rotation_scan(self, locked: list, duration_ms: int) -> None:
+    def _rotation_scan(self, locked: list, duration_ms: int,
+                       direction: int = 1) -> None:
         """Animate a dim sweep through unlocked chevrons to simulate gate spin.
 
         The scan light travels around the full ring of LED positions; locked
         chevrons are skipped, all others (including the next-to-lock target)
-        participate in the sweep.
+        participate in the sweep.  direction alternates ±1 each chevron to
+        mimic the real gate ring reversing after every lock.
 
         locked      – indices already locked (stay bright, skipped by scan)
         duration_ms – how long the scan lasts
+        direction   – +1 forward, -1 reverse through the unlocked list
         """
         # All LED positions that aren't yet locked (target included)
         unlocked = [i for i in range(self.leds.count) if i not in locked]
@@ -259,6 +265,10 @@ class GateAnimator:
             return
 
         end_ms   = utime.ticks_add(utime.ticks_ms(), duration_ms)
+        # Always start at position 0 (LED 0, master chevron) regardless of
+        # direction so it flashes at the top at the beginning of every rotation.
+        # For direction=-1 the modulo wraps negative scan_pos correctly in
+        # MicroPython (e.g. -1 % 9 == 8), giving a true counter-clockwise sweep.
         scan_pos = 0
         last_ms  = utime.ticks_ms()
         prev_idx = unlocked[0]
@@ -274,7 +284,7 @@ class GateAnimator:
                 self.leds.set(cur_idx, self.cfg.ROTATION_SCAN_DIM)
 
                 prev_idx  = cur_idx
-                scan_pos += 1
+                scan_pos += direction
                 last_ms   = now
 
             self.tick_fn()
@@ -296,19 +306,29 @@ class GateAnimator:
         # Final lock – stay on
         self.leds.set(index, self.cfg.LOCK_BRIGHTNESS)
 
-    def _kawoosh(self, locked: list) -> None:
-        """Vortex animation: frantic flashing across all LEDs, then settle."""
-        end_ms    = utime.ticks_add(utime.ticks_ms(),
-                                    int(self.cfg.KAWOOSH_DURATION * 1000))
-        on_ms     = self.cfg.KAWOOSH_ON_MS
-        off_ms    = self.cfg.KAWOOSH_OFF_MS
-        sweep_dir = 1
-        sweep_i   = 0
+    def kawoosh(self, locked: list) -> None:
+        """Vortex animation: frantic flashing across all LEDs, then settle.
+
+        Phases are proportional to KAWOOSH_DURATION so the animation scales
+        correctly regardless of how short or long the duration is set:
+          Phase 1 (~57%): chaotic single-LED bounce sweep
+          Phase 2 (~25%): all LEDs flash together
+          Phase 3 (~18%): settle – break and restore locked chevrons
+        """
+        duration_ms = int(self.cfg.KAWOOSH_DURATION * 1000)
+        end_ms      = utime.ticks_add(utime.ticks_ms(), duration_ms)
+        on_ms       = self.cfg.KAWOOSH_ON_MS
+        off_ms      = self.cfg.KAWOOSH_OFF_MS
+        # Thresholds scale with duration (same proportions as the original 2.8 s)
+        p2_ms       = duration_ms * 43 // 100   # ~43% remaining → phase 2 starts
+        p3_ms       = duration_ms * 18 // 100   # ~18% remaining → settle / break
+        sweep_dir   = 1
+        sweep_i     = 0
 
         while utime.ticks_diff(end_ms, utime.ticks_ms()) > 0:
             remaining = utime.ticks_diff(end_ms, utime.ticks_ms())
 
-            if remaining > 1200:
+            if remaining > p2_ms:
                 # Phase 1: chaotic full-ring sweep
                 self.leds.set(sweep_i, 1.0)
                 utime.sleep_ms(on_ms)
@@ -317,7 +337,7 @@ class GateAnimator:
                 sweep_i = (sweep_i + sweep_dir) % self.leds.count
                 if sweep_i == 0 or sweep_i == self.leds.count - 1:
                     sweep_dir *= -1  # bounce back and forth
-            elif remaining > 500:
+            elif remaining > p3_ms:
                 # Phase 2: all flash together
                 self.leds.set_all(1.0)
                 utime.sleep_ms(on_ms + 10)
@@ -326,7 +346,7 @@ class GateAnimator:
             else:
                 pass
             self.tick_fn()
-            if remaining <= 500:
+            if remaining <= p3_ms:
                 # Phase 3: settle – locked chevrons fade in
                 break
 

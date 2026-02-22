@@ -132,10 +132,12 @@ def run_dialing(anim: GateAnimator, ble, lock_order: list,
     """
     status_led.blink_fast()
     print('[gate] Dialing …')
-    anim.dialing_sequence(lock_order)
+    locked = anim.dialing_sequence(lock_order)
 
     if ble is not None:
-        ble.signal_open()
+        ble.signal_open()   # signal before kawoosh so both gates kawoosh together
+
+    anim.kawoosh(locked)
 
     keep_open = lambda: _trigger_active(trigger_pin)
     print('[gate] Wormhole open – will close after reed switch releases')

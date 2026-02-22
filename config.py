@@ -61,27 +61,27 @@ ROTATION_STEP_MS   = 90    # How often the scan-light advances (ms)
 
 # Chevron lock animation
 LOCK_FLASHES       = 3     # Number of flashes before locking solid
-LOCK_FLASH_ON_MS   = 80    # Flash on  duration (ms)
-LOCK_FLASH_OFF_MS  = 55    # Flash off duration (ms)
+LOCK_FLASH_ON_MS   = 70    # Flash on  duration (ms)
+LOCK_FLASH_OFF_MS  = 50    # Flash off duration (ms)
 LOCK_BRIGHTNESS    = 1.0   # Steady brightness once locked (0.0–1.0)
 
 # Final (master) chevron gets extra drama
-FINAL_LOCK_FLASHES = 5
-FINAL_FLASH_ON_MS  = 100
-FINAL_FLASH_OFF_MS = 60
+FINAL_LOCK_FLASHES = 3
+FINAL_FLASH_ON_MS  = 90
+FINAL_FLASH_OFF_MS = 55
 
 # Kawoosh – initial vortex after all chevrons lock
-KAWOOSH_DURATION   = 2.8   # Total vortex duration (s)
+KAWOOSH_DURATION   = 1.8   # Total vortex duration (s)
 KAWOOSH_ON_MS      = 35    # Flash on  in vortex (ms)
 KAWOOSH_OFF_MS     = 25    # Flash off in vortex (ms)
 
 # Stable wormhole
 WORMHOLE_TIMEOUT       = 300.0 # Hard safety cut-off (s) – fallback if reed switch
-                                # signal is lost. Set longer for game use.
-WORMHOLE_MIN_OPEN_S    = 4.0   # Minimum open time before release can trigger close.
-                                # Should be at least as long as the kawoosh + settle.
-WORMHOLE_CLOSE_DELAY_S = 3.0   # Extra seconds to wait after reed switch releases
-                                # before the wormhole actually closes.
+                               # signal is lost. Set longer for game use.
+WORMHOLE_MIN_OPEN_S    = 10.0  # Minimum open time before release can trigger close.
+                               # Should be at least as long as the kawoosh + settle.
+WORMHOLE_CLOSE_DELAY_S = 4.0   # Extra seconds to wait after reed switch releases
+                               # before the wormhole actually closes.
 WORMHOLE_PULSE_PERIOD  = 2.2   # One full breathe cycle (s)
 WORMHOLE_MIN_BRIGHT    = 0.35  # Dimmest point of pulse
 WORMHOLE_MAX_BRIGHT    = 1.0   # Brightest point of pulse
@@ -90,7 +90,7 @@ WORMHOLE_MAX_BRIGHT    = 1.0   # Brightest point of pulse
 CLOSE_DURATION     = 0.6   # Seconds to fade all LEDs out
 
 # Incoming wormhole (destination gate only)
-INCOMING_STEP_MS   = 60    # Time between each rapid chevron lock
+INCOMING_STEP_MS   = 10    # Time between each rapid chevron lock
 
 # PWM
 PWM_FREQ = 1000   # Hz – 1 kHz is flicker-free and PWM-efficient
