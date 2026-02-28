@@ -106,7 +106,7 @@ PWM_FREQ = 1000   # Hz – 1 kHz is flicker-free and PWM-efficient
 #
 # In a two-gate setup: flash one Pico W with 'primary' and the other with
 # 'secondary'. Both reed switches work identically after that.
-MODE     = 'secondary'
+MODE     = 'standalone'
 BLE_NAME = 'Stargate'           # Base BLE name; '-Pri'/'-Sec' appended automatically
 BLE_SCAN_TIMEOUT_S  = 12        # Seconds Secondary spends scanning for Primary
 BLE_RECONNECT_S     = 8         # Seconds Secondary waits between reconnect attempts
