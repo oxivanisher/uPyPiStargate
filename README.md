@@ -13,6 +13,12 @@ plays the dialing animation while the other plays the incoming animation.
 
 ---
 
+## Attention - Vibe Coded
+
+Please be aware, that this project is (almost) completely vibe-coded. It works in my use case and the code seemed sensible to me but ... you have been warned.
+
+---
+
 ## Hardware
 
 ### Single gate (Pico or Pico W)
