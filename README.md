@@ -28,9 +28,9 @@ plays the dialing animation while the other plays the incoming animation.
 ### Wiring
 
 ```
-Pico 3V3 (pin 36) ──────────────────────── [not used for LEDs]
-Pico GND  (pin 38) ──┬─────────────────── common ground
-                     │
+Pico VSYS (pin 39) ────────────────────── positive 1.8 to 5.5 V (i.e. 18650 battery)
+Pico GND (several pins) ──┬────────────── common ground (LEDs, battery and (reed) switch)
+                          │
 R = 33 Ω for blue/white LEDs (Vf ≈ 3.0 V)  →  (3.3 - 3.0) / 0.010 A = 30 Ω
 R = 100 Ω for red/yellow LEDs  (Vf ≈ 2.0 V) →  (3.3 - 2.0) / 0.013 A = 100 Ω
 
@@ -52,10 +52,10 @@ Chevron positions on the ring (viewed from front):
 
 ```
          [ 0 ]         ← top / master chevron (always locks last)
-      [8]     [1]
+     [8]       [1]
    [7]           [2]
-   [6]           [3]
-      [5]     [4]
+    [6]         [3]
+       [5]   [4]
 ```
 
 You can reorder the physical wiring however suits your model.
