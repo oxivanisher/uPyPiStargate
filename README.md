@@ -8,6 +8,9 @@ Two Pico W boards can optionally be linked over **Bluetooth LE** so that
 **either** gate can initiate a dial — whichever reed switch is triggered first
 plays the dialing animation while the other plays the incoming animation.
 
+* [Dialing example on YouTube](https://youtu.be/TO5AfCs_uB0)
+* [Files for 3D printing](https://www.printables.com/model/1620391-miniature-gaming-stargate-with-led-effects)
+
 ---
 
 ## Hardware
