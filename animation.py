@@ -136,10 +136,13 @@ class GateAnimator:
         for step, led_idx in enumerate(lock_order):
             is_final = (step == len(lock_order) - 1)
 
-            # ── Gate rotation ───────────────────────────────────
-            rotation_ms = self._random_rotation_ms()
-            self._rotation_scan(locked, rotation_ms, scan_dir)
-            scan_dir *= -1
+            # ── Gate rotation (skipped for final chevron) ────────
+            if is_final:
+                utime.sleep_ms(int(self.cfg.FINAL_LOCK_DELAY_S * 1000))
+            else:
+                rotation_ms = self._random_rotation_ms()
+                self._rotation_scan(locked, rotation_ms, scan_dir)
+                scan_dir *= -1
 
             # ── Chevron lock ────────────────────────────────────
             if is_final:

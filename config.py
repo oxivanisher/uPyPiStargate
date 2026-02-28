@@ -66,6 +66,7 @@ LOCK_FLASH_OFF_MS  = 50    # Flash off duration (ms)
 LOCK_BRIGHTNESS    = 1.0   # Steady brightness once locked (0.0–1.0)
 
 # Final (master) chevron gets extra drama
+FINAL_LOCK_DELAY_S = 1.0   # Pause after previous lock before master chevron locks (no rotation scan)
 FINAL_LOCK_FLASHES = 3
 FINAL_FLASH_ON_MS  = 90
 FINAL_FLASH_OFF_MS = 55
@@ -105,7 +106,7 @@ PWM_FREQ = 1000   # Hz – 1 kHz is flicker-free and PWM-efficient
 #
 # In a two-gate setup: flash one Pico W with 'primary' and the other with
 # 'secondary'. Both reed switches work identically after that.
-MODE     = 'standalone'
+MODE     = 'secondary'
 BLE_NAME = 'Stargate'           # Base BLE name; '-Pri'/'-Sec' appended automatically
 BLE_SCAN_TIMEOUT_S  = 12        # Seconds Secondary spends scanning for Primary
 BLE_RECONNECT_S     = 8         # Seconds Secondary waits between reconnect attempts
